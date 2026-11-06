@@ -4,13 +4,21 @@ const STORAGE_KEY_APPLICATIONS = 'curaquantis_partner_applications_v1';
 const STORAGE_KEY_LEADS = 'curaquantis_investor_leads_v1';
 
 // Base API URL configuration
+const PRODUCTION_API_URL = 'https://curaquantis-h4c8gucpbee7aege.westus3-01.azurewebsites.net';
+
 const getApiBaseUrl = (): string => {
   const envUrl = (import.meta as any).env?.VITE_API_URL;
   if (envUrl && typeof envUrl === 'string' && envUrl.trim() !== '') {
     return envUrl.trim().replace(/\/$/, '');
   }
-  // When empty or on localhost, use relative path to route through Vite proxy
-  return '';
+
+  // Local development uses the Vite proxy (localhost:5000).
+  // Production builds call the deployed Azure App Service directly.
+  if ((import.meta as any).env?.DEV) {
+    return '';
+  }
+
+  return PRODUCTION_API_URL;
 };
 
 const API_BASE_URL = getApiBaseUrl();
