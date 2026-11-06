@@ -30,6 +30,9 @@ jobs:
         run: npm ci
         working-directory: backend
 
+      - name: Remove local dependencies before packaging
+        run: rm -rf backend/node_modules
+
       - name: Deploy backend to Azure App Service
         uses: azure/webapps-deploy@v3
         with:
