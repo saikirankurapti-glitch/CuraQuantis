@@ -211,7 +211,7 @@ const Navbar = () => {
             </Link>
             <Link 
               to="/portal/login" 
-              className={`font-semibold text-xs px-3.5 py-1.5 rounded-full border whitespace-nowrap flex-shrink-0 transition-all ${
+              className={`font-medium text-xs px-3 py-1.5 rounded-full border whitespace-nowrap flex-shrink-0 transition-all ${
                 location.pathname === '/portal/login'
                   ? 'bg-orange-500 text-white border-orange-500 shadow-sm'
                   : 'text-orange-600 hover:text-white border-orange-400 hover:bg-orange-500 hover:border-orange-500'
@@ -305,7 +305,11 @@ const Navbar = () => {
               <Link
                 key={item.name}
                 to={item.href}
-                className="block py-3 text-gray-900 hover:text-blue-600 transition-colors duration-300 font-light"
+                className={
+                  item.isHighlight
+                    ? "block py-3 px-4 my-2 text-center rounded-2xl bg-gradient-to-r from-blue-600 to-indigo-600 text-white font-semibold text-sm shadow-md"
+                    : "block py-3 text-gray-900 hover:text-blue-600 transition-colors duration-300 font-light"
+                }
                 onClick={() => setIsMobileMenuOpen(false)}
               >
                 {item.name}
@@ -334,8 +338,8 @@ const Navbar = () => {
             >
               Partner & Admin Portal Sign In
             </Link>
-            <Link to="/contact" className="w-full bg-blue-600 hover:bg-blue-700 text-white px-8 py-3 rounded-full mt-2 transition-all duration-300 font-medium block text-center" onClick={() => setIsMobileMenuOpen(false)}>
-              Contact Us
+            <Link to="/contact" className="w-full bg-blue-600 hover:bg-blue-700 text-white px-8 py-3 rounded-full mt-2 transition-all duration-300 font-light block text-center">
+              Get Started
             </Link>
           </div>
         )}
