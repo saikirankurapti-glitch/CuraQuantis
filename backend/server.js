@@ -12,7 +12,7 @@ const { SEED_APPLICATIONS, SEED_LEADS } = require('./seedData');
 const app = express();
 const PORT = process.env.PORT || 5000;
 const MONGO_URI = process.env.MONGO_URI || process.env.MONGODB_URI;
-const CORS_ORIGIN = process.env.CORS_ORIGIN || '*';
+const CORS_ORIGIN = process.env.CORS_ORIGIN || 'https://agreeable-field-05acfd710.6.azurestaticapps.net';
 
 // Microsoft Outlook / Office 365 SMTP Transporter
 function getOutlookTransporter() {
@@ -41,9 +41,20 @@ function getOutlookTransporter() {
   });
 }
 
-// Middleware - Allow incoming origins including localhost and Azure static web apps
+// CORS: allow the deployed frontend and local development origins only.
+const configuredCorsOrigins = CORS_ORIGIN.split(',').map(origin => origin.trim()).filter(origin => origin && origin !== '*');
+const allowedCorsOrigins = new Set([
+  'https://agreeable-field-05acfd710.6.azurestaticapps.net',
+  ...configuredCorsOrigins
+]);
 app.use(cors({
-  origin: true,
+  origin: (origin, callback) => {
+    const isLocalDevelopment = /^http:\/\/(localhost|127\.0\.0\.1)(:\\d+)?$/.test(origin || '');
+    if (!origin || isLocalDevelopment || allowedCorsOrigins.has(origin)) {
+      return callback(null, true);
+    }
+    return callback(new Error('Origin is not allowed by CuraQuantis CORS policy'));
+  },
   credentials: true
 }));
 app.use(express.json({ limit: '50mb' }));
@@ -78,32 +89,72 @@ async function seedInitialDataIfEmpty() {
   }
 }
 
-// Connect to MongoDB Atlas
-if (!MONGO_URI) {
-  console.error('[CuraQuantis MongoDB] Missing MONGO_URI in environment!');
-} else {
-  console.log('[CuraQuantis MongoDB] Connecting to MongoDB Atlas cluster...');
-  mongoose.connect(MONGO_URI, {
-    serverSelectionTimeoutMS: 10000
-  }).then(async () => {
-    isMongoConnected = true;
-    console.log(`[CuraQuantis MongoDB] ★ SUCCESS! Connected to database: "${mongoose.connection.name}"`);
-    console.log(`[CuraQuantis MongoDB] Host: ${mongoose.connection.host}`);
-    await seedInitialDataIfEmpty();
-  }).catch(err => {
-    isMongoConnected = false;
-    console.error(`[CuraQuantis MongoDB Error] Connection failed: ${err.message}`);
-    console.log('[CuraQuantis MongoDB] Operating with in-memory resilient fallback cache.');
-  });
+// Keep the API status synchronized with the real Mongoose connection state.
+function updateMongoConnectionState() {
+  isMongoConnected = mongoose.connection.readyState === 1;
 }
 
-mongoose.connection.on('connected', () => { 
-  isMongoConnected = true; 
-  console.log('[CuraQuantis MongoDB] Connection established.');
+// MongoDB connection lifecycle diagnostics.
+mongoose.connection.on('connecting', () => {
+  console.log('[CuraQuantis MongoDB] Connecting to MongoDB Atlas...');
 });
-mongoose.connection.on('disconnected', () => { 
-  isMongoConnected = false; 
-  console.warn('[CuraQuantis MongoDB] Disconnected.');
+mongoose.connection.on('connected', () => {
+  updateMongoConnectionState();
+  console.log(`[CuraQuantis MongoDB] Connected to database "${mongoose.connection.name}" on host "${mongoose.connection.host}".`);
+});
+mongoose.connection.on('reconnected', () => {
+  updateMongoConnectionState();
+  console.log('[CuraQuantis MongoDB] Connection restored.');
+});
+mongoose.connection.on('disconnected', () => {
+  updateMongoConnectionState();
+  console.warn('[CuraQuantis MongoDB] Disconnected. Mongoose will attempt to restore the connection.');
+});
+mongoose.connection.on('error', (err) => {
+  updateMongoConnectionState();
+  // Do not print the connection URI: it contains database credentials.
+  console.error('[CuraQuantis MongoDB Error]', err.name || 'MongoError', err.message);
+});
+
+// Retry initial connection failures with bounded backoff. Once connected,
+// the MongoDB driver manages recovery from transient network interruptions.
+async function connectMongoWithRetry() {
+  if (!MONGO_URI) {
+    console.error('[CuraQuantis MongoDB] Missing MONGO_URI (or MONGODB_URI) in App Service settings.');
+    console.warn('[CuraQuantis MongoDB] API is running with the in-memory fallback cache; writes will not persist across restarts.');
+    return;
+  }
+
+  let attempt = 0;
+  while (mongoose.connection.readyState !== 1) {
+    attempt += 1;
+    try {
+      console.log(`[CuraQuantis MongoDB] Connection attempt ${attempt}...`);
+      await mongoose.connect(MONGO_URI, {
+        serverSelectionTimeoutMS: 15000,
+        connectTimeoutMS: 15000,
+        socketTimeoutMS: 45000
+      });
+
+      updateMongoConnectionState();
+      console.log('[CuraQuantis MongoDB] Initial connection succeeded.');
+      await seedInitialDataIfEmpty();
+      return;
+    } catch (err) {
+      updateMongoConnectionState();
+      const delayMs = Math.min(15000 * (2 ** Math.min(attempt - 1, 2)), 60000);
+      console.error(
+        `[CuraQuantis MongoDB] Connection attempt ${attempt} failed (${err.name || 'MongoError'}): ${err.message}`
+      );
+      console.warn(`[CuraQuantis MongoDB] Retrying in ${Math.round(delayMs / 1000)} seconds. Check Atlas database-user credentials and Network Access if this continues.`);
+      await new Promise(resolve => setTimeout(resolve, delayMs));
+    }
+  }
+}
+
+// Start the initial connection without blocking the HTTP server.
+connectMongoWithRetry().catch(err => {
+  console.error('[CuraQuantis MongoDB] Unexpected connection manager error:', err.message);
 });
 
 // Root & Health Check Endpoints
@@ -553,6 +604,6 @@ app.patch('/api/partner/leads/:id', async (req, res) => {
 // Start Server
 app.listen(PORT, () => {
   console.log(`[CuraQuantis Server] Backend running on port ${PORT}`);
-  console.log('[CuraQuantis Server] Connected to MongoDB Atlas cluster0.gxsxc6g.mongodb.net');
+  console.log(`[CuraQuantis Server] MongoDB state at startup: ${mongoose.connection.readyState === 1 ? 'connected' : 'not connected yet'}`);
 });
 
