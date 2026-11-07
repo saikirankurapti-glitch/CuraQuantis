@@ -7,6 +7,11 @@ const STORAGE_KEY_LEADS = 'curaquantis_investor_leads_v1';
 const PRODUCTION_API_URL = 'https://curaquantis-h4c8gucpbee7aege.westus3-01.azurewebsites.net';
 
 const getApiBaseUrl = (): string => {
+  // Use the Vite dev-server proxy for local browser sessions to avoid browser CORS issues.
+  if (typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')) {
+    return '';
+  }
+
   const envUrl = (import.meta as any).env?.VITE_API_URL;
   if (envUrl && typeof envUrl === 'string' && envUrl.trim() !== '') {
     return envUrl.trim().replace(/\/$/, '');

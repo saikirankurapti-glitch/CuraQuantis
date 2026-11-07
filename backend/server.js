@@ -12,7 +12,7 @@ const { SEED_APPLICATIONS, SEED_LEADS } = require('./seedData');
 const app = express();
 const PORT = process.env.PORT || 5000;
 const MONGO_URI = process.env.MONGO_URI || process.env.MONGODB_URI;
-const CORS_ORIGIN = process.env.CORS_ORIGIN || '*';
+const CORS_ORIGIN = process.env.CORS_ORIGIN || 'https://agreeable-field-05acfd710.6.azurestaticapps.net';
 
 // Microsoft Outlook / Office 365 SMTP Transporter
 function getOutlookTransporter() {
@@ -41,8 +41,22 @@ function getOutlookTransporter() {
   });
 }
 
-// Middleware
-app.use(cors({ origin: CORS_ORIGIN }));
+// CORS: allow the deployed frontend and local development origins only.
+const configuredCorsOrigins = CORS_ORIGIN.split(',').map(origin => origin.trim()).filter(origin => origin && origin !== '*');
+const allowedCorsOrigins = new Set([
+  'https://agreeable-field-05acfd710.6.azurestaticapps.net',
+  ...configuredCorsOrigins
+]);
+app.use(cors({
+  origin: (origin, callback) => {
+    const isLocalDevelopment = /^http:\/\/(localhost|127\.0\.0\.1)(:\\d+)?$/.test(origin || '');
+    if (!origin || isLocalDevelopment || allowedCorsOrigins.has(origin)) {
+      return callback(null, true);
+    }
+    return callback(new Error('Origin is not allowed by CuraQuantis CORS policy'));
+  },
+  credentials: true
+}));
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 
