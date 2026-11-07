@@ -41,16 +41,19 @@ function getOutlookTransporter() {
   });
 }
 
-// CORS: allow the deployed frontend and local development origins only.
+// CORS: allow CuraQuantis production domains, the Azure Static Web App, and local development.
 const configuredCorsOrigins = CORS_ORIGIN.split(',').map(origin => origin.trim()).filter(origin => origin && origin !== '*');
 const allowedCorsOrigins = new Set([
+  'https://curaquantis.com',
+  'https://www.curaquantis.com',
   'https://agreeable-field-05acfd710.6.azurestaticapps.net',
   ...configuredCorsOrigins
 ]);
 app.use(cors({
   origin: (origin, callback) => {
     const isLocalDevelopment = /^http:\/\/(localhost|127\.0\.0\.1)(:\\d+)?$/.test(origin || '');
-    if (!origin || isLocalDevelopment || allowedCorsOrigins.has(origin)) {
+    const isCuraQuantisDomain = /^https:\/\/([a-z0-9-]+\.)*curaquantis\.com$/i.test(origin || '');
+    if (!origin || isLocalDevelopment || isCuraQuantisDomain || allowedCorsOrigins.has(origin)) {
       return callback(null, true);
     }
     return callback(new Error('Origin is not allowed by CuraQuantis CORS policy'));
